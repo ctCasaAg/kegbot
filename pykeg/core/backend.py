@@ -75,7 +75,7 @@ class KegbotBackend:
     return tap
 
   @transaction.commit_on_success
-  def CreateAuthToken(self, auth_device, token_value, username=None):
+  def CreateAuthToken(self, auth_device, token_value, payment, username=None):
     """Creates a new AuthenticationToken.
 
     The combination of (auth_device, token_value) must be unique within the
@@ -92,7 +92,7 @@ class KegbotBackend:
         The newly-created AuthenticationToken.
     """
     token = models.AuthenticationToken.objects.create(
-        auth_device=auth_device, token_value=token_value)
+        auth_device=auth_device, token_value=token_value, payment=payment)
     if username:
       user = get_user(username)
       token.user = user
@@ -136,6 +136,8 @@ class KegbotBackend:
     if not tap.is_active or not tap.current_keg:
       raise BackendError("No active keg at this tap")
 
+    drinkCost = tap.costs.value
+
     if volume_ml is None:
       volume_ml = float(ticks) * tap.ml_per_tick
 
@@ -161,19 +163,15 @@ class KegbotBackend:
 
     d = models.Drink(ticks=ticks, keg=keg, user=user,
         volume_ml=volume_ml, time=pour_time, duration=duration,
-        shout=shout, tick_time_series=tick_time_series)
+        shout=shout, tick_time_series=tick_time_series, drinkCost=drinkCost)
     models.DrinkingSession.AssignSessionForDrink(d)
     d.save()
-
-    keg.served_volume_ml += volume_ml
-    keg.save(update_fields=['served_volume_ml'])
-
     self.cache.update_generation()
 
     if do_postprocess:
       stats.generate(d)
       events = models.SystemEvent.ProcessDrink(d)
-      tasks.schedule_tasks(events)
+      tasks.handle_new_events.delay(events)
 
     return d
 
@@ -198,28 +196,18 @@ class KegbotBackend:
     if not isinstance(drink, models.Drink):
       drink = models.Drink.objects.get(id=drink)
 
-    session = drink.session
     drink_id = drink.id
-    keg = drink.keg
-    volume_ml = drink.volume_ml
-
-    keg_update_fields = ['served_volume_ml']
-    keg.served_volume_ml -= volume_ml
 
     # Transfer volume to spillage if requested.
-    if spilled and volume_ml and drink.keg:
-      keg.spilled_ml += volume_ml
-      keg_update_fields.append('spilled_ml')
-
-    keg.save(update_fields=keg_update_fields)
+    if spilled and drink.volume_ml and drink.keg:
+      drink.keg.spilled_ml += drink.volume_ml
+      drink.keg.save()
 
     # Invalidate all statistics.
     stats.invalidate(drink)
 
     # Delete the drink, including any objects related to it.
     drink.delete()
-
-    session.Rebuild()
 
     # Regenerate stats for any drinks following the just-deleted one.
     for drink in models.Drink.objects.filter(id__gt=drink_id).order_by('id'):
@@ -274,22 +262,12 @@ class KegbotBackend:
     if volume_ml == drink.volume_ml:
       return
 
-    difference = volume_ml - drink.volume_ml
     drink.volume_ml = volume_ml
-    drink.save(update_fields=['volume_ml'])
-
-    keg = drink.keg
-    keg.served_volume_ml += difference
-    keg.save(update_fields=['served_volume_ml'])
+    drink.save()
 
     stats.invalidate(drink)
     drink.session.Rebuild()
-
-    # Regenerate stats for this drink and all subsequent.
-    for drink in models.Drink.objects.filter(id__gte=drink.id).order_by('id'):
-      stats.generate(drink)
-
-    self.cache.update_generation()
+    stats.generate(drink)
 
   @transaction.commit_on_success
   def LogSensorReading(self, sensor_name, temperature, when=None):
@@ -431,8 +409,7 @@ class KegbotBackend:
           keg_size = defaults.get_default_keg_size()
 
       keg = models.Keg.objects.create(type=beer_type, size=keg_size,
-              online=True, full_volume_ml=keg_size.volume_ml)
-
+              online=True)
       old_keg = tap.current_keg
       if old_keg:
           old_keg.online = False

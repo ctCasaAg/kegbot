@@ -21,7 +21,6 @@ def kbsite(request):
 
   ret = {
     'DEBUG': settings.DEBUG,
-    'EMBEDDED': getattr(settings, 'EMBEDDED', False),
     'EPOCH': pykeg.EPOCH,
     'VERSION': pykeg.__version__,
     'HAVE_SESSIONS': False,
@@ -34,7 +33,6 @@ def kbsite(request):
       'name': 'guest',
       'image': None,
     },
-    'PLUGINS': getattr(request, 'plugins', {}),
   }
 
   if kbsite:

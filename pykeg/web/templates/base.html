@@ -28,12 +28,6 @@
             return false;
           });
         });
-        $("a.gallery-image").fancybox({
-          'speedIn' : 100,
-          'speedOut' : 100,
-          'titlePosition' : 'inside',
-          'cyclic' : true,
-        });
     });
   </script>
 
@@ -65,17 +59,21 @@
         {% else %}
         <a class="brand" href="/">
         {% endif %}
-        {{ kbsite.settings.title }}
+        {% if kbsite.settings.title %}
+          {{kbsite.settings.title}}
+        {% else %}
+          kegbot beer device
+        {% endif %}
         </a>{% endspaceless %}
 
         <ul class="nav">
           {% if kbsite %}
-          {% if HAVE_SESSIONS %}{% navitem "kb-sessions" "Sessions" %}{% endif %}
-          {% navitem "kb-kegs" "Kegs" %}
-          {% navitem "kb-stats" "Stats" %}
-          {% if user.is_authenticated %}{% navitem "kb-account-main" "Account" %}{% endif %}
+          {% if HAVE_SESSIONS %}{% navitem kb-sessions "Sessions" %}{% endif %}
+          {% navitem kb-kegs "Kegs" %}
+          {% navitem kb-stats "Stats" %}
+          {% if user.is_authenticated %}{% navitem kb-account-main "Account" %}{% endif %}
           {% if user.is_staff %}
-          {% navitem "kegadmin-dashboard" "Admin" %}
+          {% navitem kegadmin-dashboard "Admin" %}
           {% endif %}
           {% endif %}
         </ul>

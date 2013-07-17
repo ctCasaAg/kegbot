@@ -20,10 +20,6 @@ from pykeg import EPOCH
 
 from pykeg.core import models
 from pykeg.core.backend import KegbotBackend
-from pykeg.core.cache import KegbotCache
-from pykeg.web.api.util import is_api_request
-
-from pykeg.plugin import util as plugin_util
 
 from django.db import DatabaseError
 from django.conf import settings
@@ -35,7 +31,6 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.template.response import SimpleTemplateResponse
 from django.template import RequestContext
-from django.utils import timezone
 
 # TODO(mikey): rename me
 ALLOWED_PATHS = (
@@ -71,13 +66,9 @@ class KegbotSiteMiddleware:
 
     if not request.kbsite or not request.kbsite.is_setup:
       request.need_setup = True
-    else:
-      if not epoch or epoch < EPOCH:
-        request.need_upgrade = True
-      timezone.activate(request.kbsite.settings.timezone)
-      request.plugins = dict((p.get_short_name(), p) for p in plugin_util.get_plugins())
+    elif not epoch or epoch < EPOCH:
+      request.need_upgrade = True
 
-    request.kbcache = KegbotCache()
     request.backend = KegbotBackend()
     return None
 
@@ -86,23 +77,12 @@ class KegbotSiteMiddleware:
       if view_func.__module__.startswith(prefix):
         return None
 
-    if is_api_request(request):
-      # API endpoints handle "setup required" differently.
-      return None
-
     if request.need_setup:
       return self._setup_required(request)
     elif request.need_upgrade:
       return self._upgrade_required(request)
 
     return None
-
-  def process_response(self, request, response):
-    if request.method in ('POST', 'PUT', 'PATCH') and response.status_code < 400:
-      # Invalidate cache on any successful change.
-      # TODO(mikey): More granular cache invalidations.
-      request.kbcache.update_generation()
-    return response
 
   def _setup_required(self, request):
     return SimpleTemplateResponse('setup_wizard/setup_required.html',

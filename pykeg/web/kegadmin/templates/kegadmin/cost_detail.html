@@ -1,0 +1,16 @@
+{% extends "kegadmin/base.html" %}
+{% load kegweblib %}
+{% load crispy_forms_tags %}
+
+{% block title %}Kegbot Admin: Edit Cost | {{ block.super }}{% endblock %}
+{% block pagetitle %}Kegbot Admin: Edit Cost {% endblock %}
+
+{% block kegadmin-main %}
+
+<h2>Edit Keg Cost</h2>
+
+<h4>{{ cost.name }} <small>({{ cost.currency }})</small></h4>
+    
+{% crispy form %}
+
+{% endblock %}

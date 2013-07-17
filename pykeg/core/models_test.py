@@ -58,9 +58,11 @@ class CoreModelsTestCase(TestCase):
         abv=0.05,
     )
 
+    self.keg_vol = units.UnitConverter.Convert(2.0, units.UNITS.Liter,
+                                               units.RECORD_UNIT)
     self.keg_size = models.KegSize.objects.create(
         name='Tiny Keg',
-        volume_ml=2000,
+        volume_ml=self.keg_vol,
     )
 
     self.keg = models.Keg.objects.create(
@@ -69,7 +71,6 @@ class CoreModelsTestCase(TestCase):
         start_time=make_datetime(2000, 4, 1),
         end_time=make_datetime(2000, 5, 1),
         description='Our first keg!',
-        full_volume_ml=2000,
     )
 
     self.tap = models.KegTap.objects.create(
@@ -91,6 +92,7 @@ class CoreModelsTestCase(TestCase):
     self.user.delete()
     self.user2.delete()
     self.keg.delete()
+    del self.keg_vol
     self.beer_type.delete()
     self.beer_style.delete()
     self.brewer.delete()
@@ -101,8 +103,8 @@ class CoreModelsTestCase(TestCase):
         units.Quantity(2.0, units.UNITS.Liter).InMilliliters())
     self.assertEqual(self.keg.type.brewer.name, "Moonshine Beers")
 
-    self.assertEqual(0.0, self.keg.served_volume())
-    self.assertEqual(2000, self.keg.remaining_volume())
+    self.assertEqual(self.keg.served_volume(), 0.0)
+    self.assertEqual(self.keg.remaining_volume(), self.keg_vol)
 
   def testDrinkAccounting(self):
     vol = units.Quantity(1200)
@@ -112,7 +114,9 @@ class CoreModelsTestCase(TestCase):
         username=self.user.username,
     )
 
-    self.assertEqual(d.keg.served_volume(), d.volume_ml)
+    print d
+
+    self.assertEqual(self.keg.served_volume(), d.volume_ml)
 
   def testDrinkSessions(self):
     """ Checks for the DrinkingSession records. """

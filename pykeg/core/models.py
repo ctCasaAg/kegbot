@@ -19,7 +19,6 @@
 
 import datetime
 import os
-import pytz
 import random
 
 from django.conf import settings
@@ -27,6 +26,7 @@ from django.core.urlresolvers import reverse
 from django.db import models
 from django.db.models.signals import post_save
 from django.db.models.signals import pre_save
+from django.contrib.sites.models import Site
 from django.contrib.auth.models import User
 from django.utils import timezone
 
@@ -46,8 +46,6 @@ from kegbot.api import models_pb2
 from kegbot.api import protoutil
 
 """Django models definition for the kegbot database."""
-
-TIMEZONE_CHOICES = ((z, z) for z in pytz.common_timezones)
 
 class KegbotSite(models.Model):
   name = models.CharField(max_length=64, unique=True, default='default',
@@ -72,6 +70,9 @@ class KegbotSite(models.Model):
     """Gets the default site settings."""
     return KegbotSite.objects.get_or_create(name='default',
         defaults={'is_setup': False})[0]
+
+  def full_url(self):
+    return 'http://%s' % Site.objects.get_current().domain
 
   def GetStatsRecord(self):
     try:
@@ -120,8 +121,8 @@ class SiteSettings(models.Model):
   temperature_display_units = models.CharField(max_length=64,
       choices=TEMPERATURE_DISPLAY_UNITS_CHOICES, default='f',
       help_text='Unit system to use when displaying temperature data.')
-  title = models.CharField(max_length=64, default='My Kegbot',
-      help_text='The title of this site.')
+  title = models.CharField(max_length=64, blank=True, null=True,
+      help_text='The title of this site. Example: "Kegbot San Francisco"')
   description = models.TextField(blank=True, null=True,
       help_text='Description of this site')
   background_image = models.ForeignKey('Picture', blank=True, null=True,
@@ -155,13 +156,6 @@ class SiteSettings(models.Model):
       help_text='Whether registration requires e-mail confirmation.')
   allowed_hosts = models.TextField(blank=True, null=True, default='',
       help_text='List of allowed hostnames. If blank, validation is disabled.')
-  timezone = models.CharField(max_length=255, choices=TIMEZONE_CHOICES,
-      default='UTC',
-      help_text='Time zone for this system')
-  hostname = models.CharField(max_length=255,
-      help_text='Hostname (and optional port) for this system. Examples: mykegbot.example.com, 192.168.1.100:8000')
-  use_ssl = models.BooleanField(default=False,
-      help_text='Use SSL for URLs to this site.')
 
   class Meta:
     verbose_name_plural = "site settings"
@@ -170,22 +164,11 @@ class SiteSettings(models.Model):
     return datetime.timedelta(minutes=self.session_timeout_minutes)
 
   def base_url(self):
-    protocol = 'http'
-    if self.use_ssl:
-      protocol = 'https'
-    return '%s://%s' % (protocol, self.hostname)
+    return 'http://%s' % (Site.objects.get_current(),)
 
   def reverse_full(self, *args, **kwargs):
     """Calls reverse, and returns a full URL (includes base_url())."""
     return '%s%s' % (self.base_url(), reverse(*args, **kwargs))
-
-  def format_volume(self, volume_ml):
-    if SiteSettings.get().volume_display_units == 'metric':
-      if volume_ml < 500:
-        return '%d mL' % int(volume_ml)
-      return '%.1f L' % (volume_ml / 1000.0)
-    else:
-      return '%1.f oz' % units.Quantity(volume_ml).InOunces()
 
   @classmethod
   def get(cls):
@@ -213,7 +196,7 @@ class UserProfile(models.Model):
       return qs[0]
 
   def GetStatsRecord(self):
-    qs = UserStats.objects.filter(user=self.user).order_by('-id')
+    qs = UserStats.objects.filter(user=self).order_by('-id')
     if len(qs):
       return qs[0]
     return None
@@ -236,6 +219,7 @@ class UserProfile(models.Model):
   user = models.OneToOneField(User)
   mugshot = models.ForeignKey('Picture', blank=True, null=True,
     on_delete=models.SET_NULL)
+  total = models.FloatField(max_length=10, default=0)
 
 def _user_post_save(sender, instance, **kwargs):
   profile, new = UserProfile.objects.get_or_create(user=instance)
@@ -280,9 +264,6 @@ class BeerDBModel(models.Model):
 
 class Brewer(BeerDBModel):
   """Describes a producer of beer."""
-  class Meta:
-        ordering = ('name',)
-
   PRODUCTION_CHOICES = (
     ('commercial', 'Commercial brewer'),
     ('homebrew', 'Home brewer'),
@@ -313,9 +294,6 @@ class Brewer(BeerDBModel):
 
 class BeerStyle(BeerDBModel):
   """Describes a named style of beer (Stout, IPA, etc)"""
-  class Meta:
-        ordering = ('name',)
-
   name = models.CharField(max_length=128,
       help_text='Name of the beer style')
 
@@ -325,9 +303,6 @@ class BeerStyle(BeerDBModel):
 
 class BeerType(BeerDBModel):
   """Describes a specific kind of beer, by name, brewer, and style."""
-  class Meta:
-        ordering = ('name',)
-
   name = models.CharField(max_length=255,
       help_text='Name of the beer; typically unique within a Brewer.')
   brewer = models.ForeignKey(Brewer,
@@ -374,6 +349,29 @@ class KegSize(models.Model):
     gallons = units.Quantity(self.volume_ml).InUSGallons()
     return "%s [%.2f gal]" % (self.name, gallons)
 
+class KegCost(models.Model):
+  CURRENCY_DISPLAY_UNITS_CHOICES = (
+    ('R$','Brazilian Real'),
+    ('$','Default Money'),
+  )
+  """Store data about costs and pricing"""
+  name = models.CharField(max_length=64, help_text='The currency identification.')
+  currency = models.CharField(max_length=64,
+      choices=CURRENCY_DISPLAY_UNITS_CHOICES, default='R$',
+      help_text='The current symbol or prefix name.')
+  value = models.FloatField(max_length=10, default=0, help_text='Value')
+  dateAdded = models.DateTimeField(default=timezone.now, help_text='Time when the cost have inserted.')
+
+  def get_currency(self):
+    return self.currency
+
+  def get_absolute_value(self):
+    return self.value
+
+  def __str__(self):
+    costs = self.value
+    return "%s %.2f" % (self.currency, costs)
+
 
 class KegTap(models.Model):
   """A physical tap of beer."""
@@ -382,7 +380,7 @@ class KegTap(models.Model):
   name = models.CharField(max_length=128,
       help_text='The display name for this tap, for example, "Main Tap".')
   relay_name = models.CharField(max_length=128, blank=True, null=True,
-      help_text='Name of relay attached to this tap.')
+      help_text='Name of relay attached to this tap, for example "kegboard.relay0"')
   ml_per_tick = models.FloatField(default=(1000.0/2200.0),
       help_text='mL per flow meter tick.  Common values: 0.166666666667 '
       '(SwissFlow), 0.454545454545 (Vision 2000)')
@@ -394,6 +392,8 @@ class KegTap(models.Model):
   temperature_sensor = models.ForeignKey('ThermoSensor', blank=True, null=True,
       on_delete=models.SET_NULL,
       help_text='Sensor monitoring the temperature of this Keg.')
+  costs = models.ForeignKey('KegCost', blank=False, null=True,
+      help_text='The currency and the keg costs.')
 
   def __str__(self):
     return "%s: %s" % (self.meter_name, self.name)
@@ -416,10 +416,6 @@ class Keg(models.Model):
       help_text='Beverage in this Keg.')
   size = models.ForeignKey(KegSize, on_delete=models.PROTECT,
       help_text='Size of this Keg.')
-  served_volume_ml = models.FloatField(default=0, editable=False,
-      help_text='Computed served volume.')
-  full_volume_ml = models.FloatField(default=0, editable=False,
-      help_text='Full volume of this Keg, usually set from its KegSize.')
   start_time = models.DateTimeField(default=timezone.now,
       help_text='Time the Keg was first tapped.')
   end_time = models.DateTimeField(default=timezone.now,
@@ -439,17 +435,20 @@ class Keg(models.Model):
     return reverse('kb-keg', args=(str(self.id),))
 
   def full_volume(self):
-    return self.full_volume_ml
+    return self.size.volume_ml
 
   def served_volume(self):
-    # Deprecated
-    return self.served_volume_ml
+    """Returns total volume served (sum of drinks plus spilled_volume)."""
+    total = self.spilled_ml
+    for d in self.drinks.all():
+      total += d.volume_ml
+    return total
 
   def remaining_volume(self):
-    return self.full_volume_ml - self.served_volume_ml
+    return self.full_volume() - self.served_volume()
 
   def percent_full(self):
-    result = float(self.remaining_volume()) / float(self.full_volume_ml) * 100
+    result = float(self.remaining_volume()) / float(self.full_volume()) * 100
     result = max(min(result, 100), 0)
     return result
 
@@ -557,7 +556,7 @@ class Drink(models.Model):
       help_text='Flow sensor ticks, never changed once recorded.')
   volume_ml = models.FloatField(editable=False,
       help_text='Calculated (or set) Drink volume.')
-  time = models.DateTimeField(editable=False,
+  time = models.DateTimeField(editable=False, default=timezone.now,
     help_text='Date and time of pour.')
   duration = models.PositiveIntegerField(blank=True, default=0, editable=False,
       help_text='Time in seconds taken to pour this Drink.')
@@ -575,12 +574,16 @@ class Drink(models.Model):
       help_text='Comment from the drinker at the time of the pour.')
   tick_time_series = models.TextField(blank=True, null=True, editable=False,
       help_text='Tick update sequence that generated this drink (diagnostic data).')
+  drinkCost = models.FloatField(max_length=10, default=0)
+
+  def get_drink_value(self):
+    return self.drinkCost * (self.volume_ml/1000)
 
   def get_absolute_url(self):
     return reverse('kb-drink', args=(str(self.id),))
 
   def ShortUrl(self):
-    return '%s%s' % (SiteSettings.get().base_url(), reverse('kb-drink-short', args=(str(self.id),)))
+    return '%s%s' % (KegbotSite.get().full_url(), reverse('kb-drink-short', args=(str(self.id),)))
 
   def Volume(self):
     return units.Quantity(self.volume_ml)
@@ -600,6 +603,11 @@ class AuthenticationToken(models.Model):
   class Meta:
     unique_together = ('auth_device', 'token_value')
 
+  PAYMENTS = (
+    ('PRE','Pre-Pago'),
+    ('POS','Pos-Pago'),
+  )
+
   auth_device = models.CharField(max_length=64,
       help_text='Namespace for this token.')
   token_value = models.CharField(max_length=128,
@@ -617,6 +625,8 @@ class AuthenticationToken(models.Model):
       help_text='Date token was first added to the system.')
   expire_time = models.DateTimeField(blank=True, null=True,
       help_text='Date after which token is treated as disabled.')
+  payment = models.CharField(max_length=3, choices=PAYMENTS, default="",
+      help_text='Payment method choice.', null=True)
 
   def __str__(self):
     auth_device = self.auth_device
@@ -625,7 +635,7 @@ class AuthenticationToken(models.Model):
     elif auth_device == 'core.onewire':
       auth_device = 'OneWire'
 
-    ret = "%s %s" % (auth_device, self.token_value)
+    ret = "%s %s %s" % (auth_device, self.token_value, self.payment)
     if self.nice_name:
       ret += " (%s)" % self.nice_name
     return ret
@@ -693,10 +703,6 @@ class DrinkingSession(_AbstractChunk):
 
   def __str__(self):
     return "Session #%s: %s" % (self.id, self.start_time)
-
-  def ShortUrl(self):
-    return '%s%s' % (SiteSettings.get().base_url(), reverse('kb-session-short',
-        args=(str(self.id),)))
 
   def HighlightPicture(self):
     pictures = self.pictures.all().order_by('-time')
@@ -866,7 +872,6 @@ class DrinkingSession(_AbstractChunk):
     drink.save()
     return session
 
-
 class SessionChunk(_AbstractChunk):
   """A specific user and keg contribution to a session."""
   class Meta:
@@ -1027,8 +1032,6 @@ class SystemEvent(models.Model):
       related_name='events',
       help_text='Session involved in the event, if any.')
 
-  objects = managers.SystemEventManager()
-
   def __str__(self):
     if self.kind == 'drink_poured':
       ret = 'Drink %i poured' % self.drink.id
@@ -1123,10 +1126,6 @@ class Picture(models.Model):
 
 class PourPicture(models.Model):
   '''Stores additional metadata about a picture taken during a pour.'''
-  class Meta:
-    get_latest_by = 'time'
-    ordering = ('-time',)
-
   picture = models.ForeignKey('Picture')
   drink = models.ForeignKey(Drink, blank=True, null=True,
       related_name='pictures',
@@ -1154,4 +1153,31 @@ class PourPicture(models.Model):
         return 'An unknown drinker pouring drink %s' % (self.drink.id,)
     else:
       return ''
+
+
+class BidingOperation(models.Model):
+  CURRENCY_DISPLAY_UNITS_CHOICES = (
+    ('R$','Brazilian Real'),
+    ('$','Default Money'),
+  )
+  PAYMENTS_DISPLAY_UNITS_CHOICES = (
+    ('CC','Credit Card'),
+    ('DC','Debit Card'),
+    ('CHK','Bank Papers'),
+    ('$','Money'),
+  )
+  user = models.ForeignKey(User, blank=True, null=False,
+      related_name='biding', help_text='User bided account.')
+  currency = models.CharField(max_length=64,
+      choices=CURRENCY_DISPLAY_UNITS_CHOICES, default='R$',
+      help_text='The current symbol or prefix name.')
+  payment_method = models.CharField(max_length=64,
+      choices=PAYMENTS_DISPLAY_UNITS_CHOICES, default='R$',
+      help_text='The current payment type.')
+  time = models.DateTimeField(default=timezone.now, blank=True,
+      help_text='Time when the cost have inserted.')
+  value = models.FloatField(max_length=10)
+
+
+
 

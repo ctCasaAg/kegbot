@@ -26,53 +26,69 @@ import sys
 
 LOGGER = logging.getLogger(__name__)
 
+def wrap_exception(request, exception):
+  """Returns a HttpResponse with the exception in JSON form."""
+  exc_info = sys.exc_info()
+
+  LOGGER.error('%s: %s' % (exception.__class__.__name__, exception),
+      exc_info=exc_info,
+      extra={
+        'status_code': 500,
+        'request': request,
+      }
+  )
+
+  # Don't wrap the exception during debugging.
+  if settings.DEBUG and 'deb' in request.GET:
+    return None
+
+  if settings.HAVE_RAVEN:
+    from raven.contrib.django.raven_compat.models import sentry_exception_handler
+    sentry_exception_handler(request=request)
+
+  result_data, http_code = util.to_json_error(exception, exc_info)
+  result_data['meta'] = {
+    'result': 'error'
+  }
+  return util.build_response(result_data, response_code=http_code)
+
+
 class ApiRequestMiddleware:
-  def process_view(self, request, view_func, view_args, view_kwargs):
+  def process_request(self, request):
     request.is_kb_api_request = util.is_api_request(request)
     if not request.is_kb_api_request:
       # Not an API request. Skip me.
       return None
-
     try:
       if request.need_setup:
         raise ValueError('Setup required')
       elif request.need_upgrade:
         raise ValueError('Upgrade required')
 
-      need_auth = util.needs_auth(view_func)
       privacy = request.kbsite.settings.privacy
-      if request.path in ('/api/login/', '/api/get-api-key/'):
+      if privacy == 'public':
+        # API request, but public site privacy.  Views will check access as needed.
+        return None
+      elif request.path in ('/api/login/', '/api/get-api-key/'):
         # API request to whitelisted path.
-        need_auth = False
+        return None
       else:
         # API request to non-whitelisted path, in non-public site privacy mode.
         # Demand API key.
-        if privacy == 'members' and not request.user.is_authenticated():
-          need_auth = True
-        elif privacy == 'staff' and not request.user.is_staff:
-          need_auth = True
-
-      if need_auth:
+        if privacy == 'members' and request.user.is_authenticated():
+          return None
+        elif privacy == 'staff' and request.user.is_staff:
+          return None
         util.check_api_key(request)
-
-      if request.method == 'GET':
-        cached = request.kbcache.gen_get(cache_key(request))
-        if cached:
-          response = util.build_response(request, cached, 200)
-          response.is_from_cache = True
-          return response
-
-      return None
-
     except Exception, e:
-      return util.wrap_exception(request, e)
+      return wrap_exception(request, e)
 
 
 class ApiResponseMiddleware:
   def process_exception(self, request, exception):
     """Wraps exceptions for API requests."""
     if util.is_api_request(request):
-      return util.wrap_exception(request, exception)
+      return wrap_exception(request, exception)
     return None
 
   def process_response(self, request, response):
@@ -84,14 +100,7 @@ class ApiResponseMiddleware:
       data['meta'] = {
         'result': 'ok'
       }
-      response = util.build_response(request, data, 200)
-
-      if request.method == 'GET' and response.status_code == 200:
-        if not getattr(response, 'is_from_cache', False):
-          request.kbcache.gen_set(cache_key(request), data)
+      callback = request.GET.get('callback')
+      response = util.build_response(data, 200, callback=callback)
     response['Cache-Control'] = 'max-age=0'
     return response
-
-
-def cache_key(request):
-  return 'api:%s' % request.get_full_path()

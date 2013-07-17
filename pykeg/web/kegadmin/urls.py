@@ -23,27 +23,37 @@ urlpatterns = patterns('pykeg.web.kegadmin.views',
     url(r'^users/$', 'user_list', name='kegadmin-users'),
     url(r'^users/create/$', 'add_user', name='kegadmin-add-user'),
     url(r'^users/(?P<user_id>\d+)/$', 'user_detail', name='kegadmin-edit-user'),
-
-    url(r'^drinks/$', 'drink_list', name='kegadmin-drinks'),
-    url(r'^drinks/(?P<drink_id>\d+)/$', 'drink_edit', name='kegadmin-edit-drink'),
+    url(r'^users/balance/(?P<user_id>\d+)/$', 'user_balance', name='kegadmin-user-balance'),
 
     url(r'^tokens/$', 'token_list', name='kegadmin-tokens'),
     url(r'^tokens/create/$', 'add_token', name='kegadmin-add-token'),
     url(r'^tokens/(?P<token_id>\d+)/$', 'token_detail', name='kegadmin-edit-token'),
 
+    url(r'^costs/$', 'cost_list', name='kegadmin-costs'),
+    url(r'^costs/add/$', 'add_cost', name='kegadmin-add-cost'),
+    url(r'^costs/(?P<cost_id>\d+)/$', 'cost_detail', name='kegadmin-edit-cost'),
+
     url(r'^backup-restore/$', 'backup_restore', name='kegadmin-backup-restore'),
     url(r'^backup-restore/dump/$', 'generate_backup', name='kegadmin-get-backup'),
-    url(r'^logs/$', 'logs', name='kegadmin-logs'),
-    url(r'^autocomplete/beer/$', 'autocomplete_beer_type',
-      name='kegadmin-autocomplete-beer'),
-    url(r'^autocomplete/user/$', 'autocomplete_user',
-      name='kegadmin-autocomplete-user'),
-    url(r'^autocomplete/token/$', 'autocomplete_token',
-      name='kegadmin-autocomplete-token'),
 
-    url(r'^plugin/(?P<plugin_name>\w+)/$', 'plugin_settings', name='kegadmin-plugin-settings'),
+    url(r'^connections/', include('pykeg.connections.urls')),
+    url(r'^edit-connections/$', 'connections', name='kegadmin-connections'),
+
+    url(r'^logs/$', 'logs', name='kegadmin-logs'),
+
+    url(r'^drinks/$', 'drinks', name='kegadmin-drinks'),
+    url(r'^drinks/(?P<drink_id>\d+)/$', 'drink_edit', name='kegadmin-edit-drink'),
+    url(r'^drinks/(?P<user_id>\d+)/$', 'user_drink', name='kegadmin-user-drinks'),
+
+    url(r'^autocomplete/beer/$', 'autocomplete_beer_type', name='kegadmin-autocomplete-beer'),
+    url(r'^autocomplete/user/$', 'autocomplete_user', name='kegadmin-autocomplete-user'),
+    url(r'^autocomplete/token/$', 'autocomplete_token', name='kegadmin-autocomplete-token'),
+
+    url(r'^biding/$', 'bidings', name='kegadmin-biding'),
+    url(r'^biding/add/$', 'add_biding', name='kegadmin-add-biding'),
 )
 
-from pykeg.plugin import util
-if util.get_plugins():
-    urlpatterns += util.get_admin_urls()
+urlpatterns += patterns('pykeg.connections.twitter.views',
+    url('^redirect/$', 'site_twitter_redirect', name='site_twitter_redirect'),
+    url('^callback/$', 'site_twitter_callback', name='site_twitter_callback'),
+)

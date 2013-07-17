@@ -10,6 +10,7 @@ from pykeg.core import models
 ALL_TAPS = models.KegTap.objects.all()
 ALL_SIZES = models.KegSize.objects.all()
 ALL_KEGS = models.Keg.objects.all()
+CURRENCY_TYPES = models.KegCost.objects.all()
 
 class GeneralSettingsForm(forms.Form):
   name = forms.CharField(help_text='Name of this Kegbot system')
@@ -56,7 +57,7 @@ class ChangeKegForm(forms.Form):
 
     cd = self.cleaned_data
     keg = b.StartKeg(tap, beer_name=cd['beer_name'], brewer_name=cd['brewer_name'],
-        style_name=cd['style_name'], keg_size=cd['keg_size'])
+        style_name=cd['style_name'])
 
     if cd['description']:
       keg.description = cd['description']
@@ -80,7 +81,7 @@ class TapForm(forms.ModelForm):
   class Meta:
     model = models.KegTap
     fields = ('name', 'meter_name', 'relay_name', 'description',
-        'temperature_sensor', 'ml_per_tick')
+        'temperature_sensor', 'ml_per_tick', 'costs')
 
   def __init__(self, *args, **kwargs):
     site = kwargs.pop('site', None)
@@ -96,6 +97,7 @@ class TapForm(forms.ModelForm):
       Field('relay_name', css_class='input-xlarge'),
       Field('temperature_sensor', css_class='input-xlarge'),
       Field('ml_per_tick', css_class='input-xlarge'),
+      Field('costs', css_class='input-xlarge'),
       Field('description', css_class='input-xlarge'),
       FormActions(
           Submit('submit_tap_form', 'Save Settings', css_class='btn-success'),
@@ -122,9 +124,6 @@ class SiteSettingsForm(forms.ModelForm):
         'privacy',
         'volume_display_units',
         'temperature_display_units',
-        'timezone',
-        'hostname',
-        'use_ssl',
         'web_hook_urls',
         'session_timeout_minutes',
         'google_analytics_id',
@@ -144,9 +143,6 @@ class SiteSettingsForm(forms.ModelForm):
       Field('privacy', css_class='input-xlarge'),
       Field('volume_display_units', css_class='input-xlarge'),
       Field('temperature_display_units', css_class='input-xlarge'),
-      Field('timezone'),
-      Field('hostname'),
-      Field('use_ssl'),
       Field('web_hook_urls'),
       Field('session_timeout_minutes'),
       Field('google_analytics_id'),
@@ -168,9 +164,6 @@ class BeerTypeForm(forms.ModelForm):
         'calories_oz', 'carbs_oz', 'original_gravity', 'specific_gravity',
         'untappd_beer_id')
 
-  new_image = forms.ImageField(required=False,
-      help_text='Set/replace image for this beer type.')
-
   helper = FormHelper()
   helper.form_class = 'form-horizontal'
   helper.layout = Layout(
@@ -184,7 +177,6 @@ class BeerTypeForm(forms.ModelForm):
       Field('original_gravity'),
       Field('specific_gravity'),
       Field('untappd_beer_id'),
-      Field('new_image'),
       FormActions(
           Submit('submit', 'Save', css_class='btn-primary'),
       )
@@ -193,7 +185,7 @@ class BeerTypeForm(forms.ModelForm):
 class BrewerForm(forms.ModelForm):
   class Meta:
     model = models.Brewer
-
+    
   helper = FormHelper()
   helper.form_class = 'form-horizontal'
   helper.layout = Layout(
@@ -222,6 +214,9 @@ class BeerStyleForm(forms.ModelForm):
           Submit('submit', 'Save', css_class='btn-primary'),
       )
   )
+
+class TweetForm(forms.Form):
+  tweet = forms.CharField(max_length=140, required=True)
 
 class FindUserForm(forms.Form):
   username = forms.CharField()
@@ -254,14 +249,22 @@ class TokenForm(forms.ModelForm):
     fields = (
         'nice_name',
         'enabled',
+        'payment'
     )
+  PAYMENT = (
+    ('PRE','Pre-Pago'),
+    ('POS','Pos-Pago'),
+  )
+
   username = forms.CharField(required=False)
+  payment = forms.ChoiceField(choices=PAYMENT,required=False)
 
   helper = FormHelper()
   helper.form_class = 'form-horizontal user-select'
   helper.layout = Layout(
       Field('username', css_class='input-xlarge'),
       Field('nice_name', css_class='input-xlarge'),
+      'payment',
       'enabled',
       FormActions(
           Submit('submit', 'Save', css_class='btn-primary'),
@@ -287,14 +290,20 @@ class AddTokenForm(forms.ModelForm):
         'auth_device',
         'token_value',
         'enabled',
+        'payment',
     )
   CHOICES = (
     ('core.rfid', 'RFID'),
     ('core.onewire', 'OneWire/iButton'),
     ('nfc', 'NFC'),
   )
+  PAYMENT = (
+    ('PRE','Pre-Pago'),
+    ('POS','Pos-Pago'),
+  )
   auth_device = forms.ChoiceField(choices=CHOICES)
   username = forms.CharField(required=False)
+  payment = forms.ChoiceField(choices=PAYMENT)
 
   helper = FormHelper()
   helper.form_class = 'form-horizontal user-select'
@@ -302,6 +311,7 @@ class AddTokenForm(forms.ModelForm):
       Field('auth_device', css_class='input-xlarge'),
       Field('token_value', css_class='input-xlarge'),
       Field('username', css_class='input-xlarge'),
+      Field('payment', css_class='input-xlarge'),
       'enabled',
       FormActions(
           Submit('submit', 'Save', css_class='btn-primary'),
@@ -319,6 +329,35 @@ class AddTokenForm(forms.ModelForm):
       raise forms.ValidationError('Invalid username; use a complete user name or leave blank.')
     return username
 
+class DeleteTokenForm(forms.Form):
+  helper = FormHelper()
+  helper.form_class = 'form-horizontal'
+  helper.layout = Layout(
+      FormActions(
+          Submit('submit_delete_token_form', 'Delete Token', css_class='btn-danger'),
+      )
+  )
+
+
+class CostForm(forms.ModelForm):
+  class Meta:
+    model = models.KegCost
+    fields = (
+        'name',
+        'currency',
+        'value',
+    )
+
+  helper = FormHelper()
+  helper.form_class = 'form-horizontal user-select'
+  helper.layout = Layout(
+      Field('name', css_class='input-xlarge'),
+      Field('currency', css_class='input-xlarge'),
+      Field('value', css_class='input-xlarge'),
+      FormActions(
+          Submit('submit', 'Save', css_class='btn-primary'),
+      )
+  )
 
 class CancelDrinkForm(forms.Form):
   pass
@@ -345,7 +384,7 @@ class ChangeDrinkVolumeForm(forms.Form):
 class RecordDrinkForm(forms.Form):
   units = forms.ChoiceField(required=True, choices=ChangeDrinkVolumeForm.UNIT_CHOICES)
   volume = forms.FloatField(required=True, min_value=0)
-  username = forms.CharField(required=False)
+  username = forms.CharField(required=True)
 
   def clean_username(self):
     username = self.cleaned_data['username']
@@ -365,3 +404,30 @@ class RecordDrinkForm(forms.Form):
     else:
       self.cleaned_data['volume_ml'] = volume
     return volume
+
+class AddBidingForm(forms.ModelForm):
+  class Meta:
+    model = models.BidingOperation
+    fields = (
+        'currency',
+        'payment_method',
+        'value',
+    )
+
+  username = forms.CharField(required=True)
+
+  helper = FormHelper()
+  helper.form_class = 'form-horizontal user-select'
+  helper.layout = Layout(
+      Field('username', css_class='input-xlarge'),
+      Field('currency', css_class='input-xlarge'),
+      Field('payment_method', css_class='input-xlarge'),
+      Field('value', css_class='input-xlarge'),
+      FormActions(
+          Submit('submit', 'Save', css_class='btn-primary'),
+      )
+  )
+
+
+
+

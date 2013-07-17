@@ -32,9 +32,6 @@
   {{keg.type.name}}
   {% if keg.type.brewer %}
   <small>{{keg.type.brewer}}</small>
-  {% if user.is_staff %}
-  <small>(<a href="{% url 'kegadmin-edit-beer-type' keg.type.id %}">edit beer</a>)</small>
-  {% endif %}
   {% endif %}
 </h2>
 
@@ -45,7 +42,7 @@
     <tr>
       <th>Status</th>
       <td>
-        {% if keg.online %}
+        {% ifequal keg.status "online" %}
         Keg is <b>online</b>, and is {{ keg.keg_age.days }}
         day{{keg.keg_age.days|pluralize}} old.
         <span class="muted">
@@ -58,7 +55,7 @@
         {% else %}
         Keg is <b>offline</b>; it lasted {{ keg.keg_age.days }}
         day{{keg.keg_age.days|pluralize}}.
-        {% endif %}
+        {% endifequal %}
       </td>
     </tr>
 

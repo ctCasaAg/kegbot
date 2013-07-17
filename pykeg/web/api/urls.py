@@ -21,10 +21,8 @@ from django.conf.urls import url
 
 urlpatterns = patterns('pykeg.web.api.views',
 
-    url(r'^auth-tokens/(?P<auth_device>[\w\.]+)/(?P<token_value>\w+)/?$',
-        'get_auth_token'),
-    url(r'^auth-tokens/(?P<auth_device>[\w\.]+)/(?P<token_value>\w+)/assign/?$',
-        'assign_auth_token'),
+    url(r'^auth-tokens/(?P<auth_device>[\w\.]+)/(?P<token_value>\w+)/?$', 'get_auth_token'),
+    url(r'^auth-tokens/(?P<auth_device>[\w\.]+)/(?P<token_value>\w+)/assign/?$', 'assign_auth_token'),
     url(r'^cancel-drink/?$', 'cancel_drink'),
     url(r'^drinks/?$', 'all_drinks'),
     url(r'^drinks/(?P<drink_id>\d+)/?$', 'get_drink'),

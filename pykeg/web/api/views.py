@@ -24,6 +24,7 @@ import logging
 import sys
 import traceback
 import types
+import json
 
 from django.conf import settings
 from django.contrib.auth import login as auth_login
@@ -53,13 +54,20 @@ from pykeg.web.kegadmin.forms import ChangeKegForm
 
 from pykeg.web import tasks
 
+from itertools import chain
+from StringIO import StringIO
+
 _LOGGER = logging.getLogger(__name__)
 
 ### Decorators
 
 def auth_required(viewfunc):
-  util.set_needs_auth(viewfunc)
-  return viewfunc
+  """Checks for a valid API key before serving the decorated view."""
+  def new_function(*args, **kwargs):
+    request = args[0]
+    util.check_api_key(request)
+    return viewfunc(*args, **kwargs)
+  return wraps(viewfunc)(new_function)
 
 ### Helpers
 
@@ -186,17 +194,47 @@ def get_keg_stats(request, keg_id):
   return keg.GetStats()
 
 def get_system_stats(request):
-  return models.KegbotSite.get().GetStats()
+  return models.KegbotSite.get().GetStatsRecord()
 
 def all_taps(request):
-  return models.KegTap.objects.all().order_by('name')
+  taps = models.KegTap.objects.all().order_by('id')
+  return taps
 
 @auth_required
 def user_list(request):
-  return models.User.objects.filter(is_active=True).order_by('username')
+  users = models.User.objects.filter(is_active=True).order_by('username')
+  for user in users:
+    drinks = models.Drink.objects.all().filter(user=user.id)
+    bidings = models.BidingOperation.objects.all().filter(user=user.id)
+    balance = sorted(chain(drinks,bidings), key=lambda instance:instance.time)
+    total = 0
+    for op in balance:
+      if op.__class__.__name__ == "Drink":
+        op.drinkValue = (op.drinkCost * (op.volume_ml/1000))
+        total = total - op.drinkValue
+      else:
+        total = total + op.value
+    user.total = total
+
+  return users
 
 def get_user(request, username):
   user = get_object_or_404(models.User, username=username)
+
+  drinks = models.Drink.objects.all().filter(user=user.id)
+  bidings = models.BidingOperation.objects.all().filter(user=user.id)
+
+  balance = sorted(chain(drinks,bidings), key=lambda instance:instance.time)
+  total = 0
+  for op in balance:
+    if op.__class__.__name__ == "Drink":
+      op.drinkValue = (op.drinkCost * (op.volume_ml/1000))
+      total = total - op.drinkValue
+    else:
+      total = total + op.value
+
+  user.total = total
+
   return protolib.ToProto(user, full=True)
 
 def get_user_drinks(request, username):
@@ -209,11 +247,23 @@ def get_user_events(request, username):
 
 def get_user_stats(request, username):
   user = get_object_or_404(models.User, username=username)
-  return user.get_profile().GetStats()
+  return user.get_profile().GetStatsRecord()
 
 @auth_required
 def get_auth_token(request, auth_device, token_value):
   tok = request.backend.GetAuthToken(auth_device, token_value)
+  drinks = models.Drink.objects.all().filter(user=tok.user.id)
+  bidings = models.BidingOperation.objects.all().filter(user=tok.user.id)
+  balance = sorted(chain(drinks,bidings), key=lambda instance:instance.time)
+  total = 0
+  for op in balance:
+    if op.__class__.__name__ == "Drink":
+      op.drinkValue = (op.drinkCost * (op.volume_ml/1000))
+      total = total - op.drinkValue
+    else:
+      total = total + op.value
+  tok.user.total = total
+
   return tok
 
 @csrf_exempt
@@ -230,7 +280,7 @@ def assign_auth_token(request, auth_device, token_value):
   b = request.backend
   username = form.cleaned_data['username']
 
-  user = backend.get_user(username)
+  user = b._GetUserObjFromUsername(username)
   if not user:
     raise kbapi.BadRequestError("User does not exist")
 
@@ -238,7 +288,6 @@ def assign_auth_token(request, auth_device, token_value):
     tok = b.GetAuthToken(auth_device, token_value)
   except backend.NoTokenError:
     tok = b.CreateAuthToken(auth_device, token_value, username=username)
-
   if tok.user != user:
     if tok.user:
       raise kbapi.BadRequestError("Token is already bound to a user")

@@ -3,31 +3,21 @@
 {% load humanize %}
 
 {% block title %}{{ session.GetTitle }} | {{ block.super}}{% endblock %}
-{% block pagetitle %}
-  {{ session.GetTitle }}
-  <small>{{ session.start_time|date:"l, F jS, P" }}</small>
-{% endblock %}
+{% block pagetitle %}{{ session.GetTitle }}{% endblock %}
 
 {% block col-1 %}
 
-{% with session.events.timeline as events %}
-{% include 'kegweb/includes/timeline.html' %}
-{% endwith %}
+<h2>Summary</h2>
 
-{% endblock col-1 %}
-
-
-
-{% block col-2 %}
-<table class="table table-condensed table-bordered">
-  <thead>
-    <tr>
-      <th colspan="2">
-        Session Summary
-      </th>
-    </tr>
-  </thead>
+<table class="table table-condensed">
   <tbody>
+    <tr>
+      <th>When</th>
+      <td>
+        {{session.start_time}}
+      </td>
+    </tr>
+
     {% with session.keg_chunks.all as keg_chunks %}
     <tr>
       <th>Keg{{keg_chunks.count|pluralize}}</th>
@@ -42,15 +32,15 @@
     {% endwith %}
 
     <tr>
-      <th>Total</th>
+      <th>Drink Count</th>
       <td>
-        {{ session.drinks.count }} pours,
+        {{ session.drinks.valid.count }} pours,
         {% volume session.volume_ml %}
       </td>
     </tr>
 
     <tr>
-      <th>Drinkers</th>
+      <th>Registered Drinkers</th>
       <td>
         {{ stats.registered_drinkers|length }}
         drinker{{ stats.registered_drinkers|length|pluralize }}
@@ -59,31 +49,61 @@
   </tbody>
 </table>
 
-{% chart users_by_volume stats 300 250 %}
-<br/>
+{% comment %}
+{% for chunk in session.UserChunksByVolume %}
+  {% if chunk.user %}
+  <div class="kb-drink-box-mugshot">
+    {% with chunk.user as drinker %}
+      {% mugshot_box drinker 96 %}
+    {% endwith %}
+  </div>
+  {% endif %}
+{% endfor %}
+{% endcomment %}
 
-{% with session.UserChunksByVolume as chunks %}
-{% if chunks %}
-<table class="table table-bordered table-striped table-condensed table-hover">
-  <thead>
-    <tr>
-      <th>
-        Drinker
-      </th>
-      <th>
-        Volume
-      </th>
-    </tr>
-  </thead>
+<h2>Drinkers by Volume</h2>
+<table class="condensed-table">
   <tbody>
     {% for chunk in session.UserChunksByVolume %}
     <tr>
-      <th>{% drinker_name chunk.user %}</th>
-      <td>{% volume chunk.volume_ml %}</td>
+      <td>
+        <div class="kb-drink-box-mugshot">
+          {% with chunk.user as drinker %}
+            {% mugshot_box drinker 96 %}
+          {% endwith %}
+         <span class="label">{{ forloop.counter|ordinal }}</span>
+          {% if chunk.user %}{{ chunk.user }}{% else %}{{guest_info.name}}{% endif %}
+        </div>
+      </td>
+      <td>
+        {% chart user_session_chunks chunk 350 100 %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+
+{% with session.pictures.all as pictures %}
+{% if pictures.count %}
+<h2>Beer Goggles!</h2>
+<div class="row">
+{% gallery pictures "span2" gallery_id=session.id %}
+</div>
 {% endif %}
 {% endwith %}
+
+{% endblock col-1 %}
+
+{% block col-2 %}
+<div class="row">
+    <h2>Drinker Breakdown</h2>
+    {% chart users_by_volume stats 350 250 %}
+</div>
+
+<div class="row">
+    <h2>All Pours</h2>
+    {% for drink in session.drinks.all %}
+      {% include "kegweb/drink-box.html" %}
+    {% endfor %}
+</div>
 {% endblock col-2 %}

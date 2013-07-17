@@ -89,12 +89,9 @@ class NavitemNode(Node):
     self._exact = 'exact' in args[2:]
 
   def render(self, context):
-    viewname = Variable(self._viewname).resolve(context)
+    viewname = self._viewname
     title = Variable(self._title).resolve(context)
-    if viewname.startswith('/'):
-      urlbase = viewname
-    else:
-      urlbase = reverse(viewname)
+    urlbase = reverse(viewname)
 
     request_path = context['request_path']
 
@@ -179,7 +176,7 @@ class VolumeNode(Node):
 ### drinker
 @register.tag('drinker_name')
 def drinker_name_tag(parser, token):
-  """{% drinker_name <drink_or_user_obj> [nolink] %}"""
+  """{% drinker <drink> %}"""
   tokens = token.contents.split()
   if len(tokens) < 2:
     raise TemplateSyntaxError, '%s requires at least 2 tokens' % tokens[0]
@@ -187,27 +184,19 @@ def drinker_name_tag(parser, token):
 
 class DrinkerNameNode(Node):
   def __init__(self, drink_varname, extra_args):
-    self._varname = drink_varname
+    self._drink_varname = drink_varname
     self._extra_args = extra_args
 
   def render(self, context):
-    obj = Variable(self._varname)
+    tv = Variable(self._drink_varname)
     try:
-      obj = obj.resolve(context)
+      drink = tv.resolve(context)
     except (VariableDoesNotExist, ValueError):
-      obj = None
-
-    user = None
-    if obj:
-      if isinstance(obj, models.Drink) or isinstance(obj, models.SystemEvent):
-        user = obj.user
-      elif isinstance(obj, models.User):
-        user = obj
-    if user:
-      if 'nolink' in self._extra_args:
-        return user.username
-      else:
-        return '<a href="%s">%s</a>' % (reverse('kb-drinker', args=[user.username]), user.username)
+      drink = None
+    if not drink or not isinstance(drink, models.Drink):
+      return ''
+    if drink.user:
+      return drink.user.username
     return context['guest_info']['name']
 
   @classmethod

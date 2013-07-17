@@ -77,7 +77,8 @@ def AuthTokenToProto(record, full=False):
   ret.id = record.id
   ret.auth_device = record.auth_device
   ret.token_value = record.token_value
-  if record.user_id:
+  ret.payment = record.payment
+  if record.user:
     ret.username = str(record.user.username)
     ret.user.MergeFrom(ToProto(record.user))
   if record.nice_name:
@@ -112,14 +113,14 @@ def PourPictureToProto(record, full=False):
     ret.time = datestr(record.time)
   if record.caption:
     ret.caption = record.caption
-  if record.user_id:
+  if record.user:
     ret.user_id = record.user.username
-  if record.keg_id:
-    ret.keg_id = record.keg_id
-  if record.session_id:
-    ret.session_id = record.session_id
-  if record.drink_id:
-    ret.drink_id = record.drink_id
+  if record.keg:
+    ret.keg_id = record.keg.id
+  if record.session:
+    ret.session_id = record.session.id
+  if record.drink:
+    ret.drink_id = record.drink.id
   return ret
 
 @converts(models.BeerStyle)
@@ -134,8 +135,8 @@ def BeerTypeToProto(beertype, full=False):
   ret = models_pb2.BeerType()
   ret.id = str(beertype.id)
   ret.name = beertype.name
-  ret.brewer_id = str(beertype.brewer_id)
-  ret.style_id = str(beertype.style_id)
+  ret.brewer_id = str(beertype.brewer.id)
+  ret.style_id = str(beertype.style.id)
   if beertype.edition is not None:
     ret.edition = beertype.edition
   # TODO(mikey): guarantee this at DB level
@@ -181,12 +182,12 @@ def DrinkToProto(drink, full=False):
   ret.url = drink.get_absolute_url()
   ret.ticks = drink.ticks
   ret.volume_ml = drink.volume_ml
-  ret.session_id = drink.session_id
+  ret.session_id = drink.session.id
   ret.time = datestr(drink.time)
   ret.duration = drink.duration
   if drink.keg:
-    ret.keg_id = drink.keg_id
-  if drink.user_id:
+    ret.keg_id = drink.keg.id
+  if drink.user:
     ret.user_id = drink.user.username
   if drink.shout:
     ret.shout = drink.shout
@@ -194,7 +195,7 @@ def DrinkToProto(drink, full=False):
     ret.tick_time_series = drink.tick_time_series
 
   if full:
-    if drink.user_id:
+    if drink.user:
       ret.user.MergeFrom(ToProto(drink.user))
     if drink.keg:
       ret.keg.MergeFrom(ToProto(drink.keg))
@@ -209,8 +210,8 @@ def KegToProto(keg, full=False):
   ret = models_pb2.Keg()
   ret.id = keg.id
   ret.url = keg.get_absolute_url()
-  ret.type_id = str(keg.type_id)
-  ret.size_id = keg.size_id
+  ret.type_id = str(keg.type.id)
+  ret.size_id = keg.size.id
   ret.size_name = keg.size.name
   ret.size_volume_ml = keg.size.volume_ml
   rem = float(keg.remaining_volume())
@@ -248,15 +249,16 @@ def KegTapToProto(tap, full=False):
   ret.meter_name = tap.meter_name
   ret.relay_name = tap.relay_name or ''
   ret.ml_per_tick = tap.ml_per_tick
+  if tap.costs is not None:
+    ret.costs = tap.costs.value
   if tap.description is not None:
     ret.description = tap.description
   if tap.current_keg:
-    ret.current_keg_id = tap.current_keg_id
+    ret.current_keg_id = tap.current_keg.id
     if full:
       ret.current_keg.MergeFrom(ToProto(tap.current_keg, full=True))
-
   if tap.temperature_sensor:
-    ret.thermo_sensor_id = tap.temperature_sensor_id
+    ret.thermo_sensor_id = tap.temperature_sensor.id
     log = tap.temperature_sensor.LastLog()
     if log:
       ret.last_temperature.MergeFrom(ToProto(log))
@@ -281,7 +283,7 @@ def SessionToProto(record, full=False):
 def ThermoLogToProto(record, full=False):
   ret = models_pb2.ThermoLog()
   ret.id = record.id
-  ret.sensor_id = record.sensor_id
+  ret.sensor_id = record.sensor.id
   ret.temperature_c = record.temp
   ret.time = datestr(record.time)
   return ret
@@ -300,6 +302,10 @@ def UserToProto(user, full=False):
   ret.username = user.username
   ret.url = user.get_profile().get_absolute_url()
   ret.is_active = user.is_active
+  if hasattr(user, 'total') and user.total is not None:
+    ret.total = user.total
+  else:
+    ret.total = 0
   if full:
     ret.first_name = user.first_name
     ret.last_name = user.last_name
@@ -310,7 +316,7 @@ def UserToProto(user, full=False):
     ret.last_login = datestr(user.last_login)
     ret.date_joined = datestr(user.date_joined)
   profile = user.get_profile()
-  if profile.mugshot_id:
+  if profile.mugshot:
     ret.image.MergeFrom(ToProto(profile.mugshot))
   return ret
 
@@ -334,19 +340,19 @@ def SystemEventToProto(record, full=False):
   ret.kind = record.kind
   ret.time = datestr(record.time)
 
-  if record.drink_id:
-    ret.drink_id = record.drink_id
+  if record.drink:
+    ret.drink_id = record.drink.id
     if full:
       ret.drink.MergeFrom(ToProto(record.drink, full=True))
-  if record.keg_id:
-    ret.keg_id = record.keg_id
+  if record.keg:
+    ret.keg_id = record.keg.id
     if full:
       ret.keg.MergeFrom(ToProto(record.keg, full=True))
-  if record.session_id:
-    ret.session_id = record.session_id
+  if record.session:
+    ret.session_id = record.session.id
     if full:
       ret.session.MergeFrom(ToProto(record.session, full=True))
-  if record.user_id:
+  if record.user:
     ret.user_id = str(record.user.username)
     if full:
       ret.user.MergeFrom(ToProto(record.user, full=True))
@@ -368,7 +374,7 @@ def SoundEventToProto(record, full=False):
   ret.event_name = record.event_name
   ret.event_predicate = record.event_predicate
   ret.sound_url = record.soundfile.sound.url
-  if record.user_id:
+  if record.user:
     ret.user = record.user.username
   return ret
 
@@ -377,13 +383,13 @@ def SoundEventToProto(record, full=False):
 def GetDrinkDetail(drink):
   ret = api_pb2.DrinkDetail()
   ret.drink.MergeFrom(ToProto(drink))
-  if drink.user_id:
+  if drink.user:
     ret.user.MergeFrom(ToProto(drink.user))
-  if drink.keg_id:
+  if drink.keg:
     ret.keg.MergeFrom(ToProto(drink.keg))
-  if drink.session_id:
+  if drink.session:
     ret.session.MergeFrom(ToProto(drink.session))
-  for i in drink.pictures.all().iterator():
+  for i in drink.pictures.all():
     ret.images.add().MergeFrom(ToProto(i))
   return ret
 

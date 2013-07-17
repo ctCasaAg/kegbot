@@ -48,13 +48,11 @@ class BaseApiTestCase(TestCase):
 		self.assertIsNotNone(drink)
 		self.assertEquals(2200, drink.ticks)
 		self.assertAlmostEqual(1000.0, drink.volume_ml, places=3)
-		keg = models.Keg.objects.get(pk=keg.id)
 		self.assertAlmostEqual(1000.0, keg.served_volume(), places=3)
 		self.assertEquals('', drink.shout)
 		self.assertEquals(0, drink.duration)
 
 		drink = self.backend.RecordDrink(TAP_NAME, ticks=1100)
-		keg = models.Keg.objects.get(pk=keg.id)
 		self.assertIsNotNone(drink)
 		self.assertEquals(1100, drink.ticks)
 		self.assertAlmostEqual(500.0, drink.volume_ml, places=3)
@@ -62,7 +60,6 @@ class BaseApiTestCase(TestCase):
 
 		# Add with volume, taking precedence over ticks.
 		drink = self.backend.RecordDrink(TAP_NAME, ticks=1100, volume_ml=1)
-		keg = models.Keg.objects.get(pk=keg.id)
 		self.assertIsNotNone(drink)
 		self.assertEquals(1100, drink.ticks)
 		self.assertAlmostEqual(1.0, drink.volume_ml, places=3)
@@ -86,7 +83,6 @@ class BaseApiTestCase(TestCase):
 			d = self.backend.RecordDrink(tap_name=TAP_NAME, ticks=1, volume_ml=100)
 
 		drinks = list(models.Drink.objects.all().order_by('id'))
-		keg = models.Keg.objects.get(pk=keg.id)
 		self.assertEquals(10, len(drinks))
 		self.assertAlmostEqual(1000.0, keg.served_volume(), places=3)
 
@@ -96,21 +92,19 @@ class BaseApiTestCase(TestCase):
 
 		self.backend.CancelDrink(drinks[-1])
 		drinks = list(models.Drink.objects.all().order_by('id'))
-		keg = models.Keg.objects.get(pk=keg.id)
 		self.assertEquals(9, len(drinks))
 		self.assertAlmostEqual(900.0, keg.served_volume(), places=3)
 		session = models.DrinkingSession.objects.get(id=session.id)
 		self.assertAlmostEqual(session.GetStats().total_volume_ml, 900.0, places=3)
 
 		spilled_drink = drinks[-1]
-		keg = models.Keg.objects.get(pk=keg.id)
+		keg = models.Keg.objects.all()[0]
 		self.assertEquals(0, keg.spilled_ml)
-
 		self.backend.CancelDrink(drinks[-1], spilled=True)
-		keg = models.Keg.objects.get(pk=keg.id)
+		keg = models.Keg.objects.all()[0]
 		drinks = list(models.Drink.objects.all().order_by('id'))
 		self.assertEquals(8, len(drinks))
-		self.assertAlmostEqual(800.0, keg.served_volume(), places=3)
+		self.assertAlmostEqual(900.0, keg.served_volume(), places=3)
 		self.assertAlmostEqual(100.0, keg.spilled_ml, places=3)
 
 	def test_keg_management(self):

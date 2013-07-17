@@ -23,28 +23,30 @@
         <th>User</th>
         <th>Date Joined</th>
         <th>Status</th>
+        <th>Options</th>
     </tr>
 </thead>
 <tbody>
 {% for user in users %}
 <tr>
-    <td>
-        <div class="form-horizontal">
-            <a class="btn btn-small btn-primary" href="{% url "kegadmin-edit-user" user.id %}">Edit</a>&nbsp;&nbsp;
-            <span>{{ user.username }}</span>
-    </td>
+    <td><span>{{ user.username }}</span></td>
     <td>{{ user.date_joined }}</td>
     <td>
         {% if user.is_active %}<span class="label label-success">Active</span>{% else %}<span class="label">Disabled</span>{% endif %}
         {% if user.is_staff %}<span class="label label-warning">Staff</span>{% endif %}
         {% if user.is_superuser %}<span class="label label-important">Superuser</span>{% endif %}
     </td>
+    <td>
+        <div class="form-horizontal">
+            <a class="btn btn-small btn-primary" href="{% url "kegadmin-edit-user" user.id %}">Edit</a>&nbsp;&nbsp;
+            <a class="btn btn-small btn-primary" href="{% url "kegadmin-user-balance" user.id %}">Balance</a>&nbsp;&nbsp;
+        </div>
+    </td>
 </tr>
 {% endfor %}
 <tr class="info">
-    <td colspan="3" style="text-align:right;">
-        <a class="btn btn-small btn-success"
-            href="{% url 'kegadmin-add-user' %}"><i class="icon-plus icon-white"></i> Add User</a>
+    <td colspan="4" style="text-align:right;">
+        <a class="btn btn-small btn-success" href="{% url 'kegadmin-add-user' %}"><i class="icon-plus icon-white"></i> Add User</a>
     </td>
 </tr>
 </tbody>

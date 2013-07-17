@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load kegweblib %}
 
-{% block title %}Drink {{ drink.id }} by {% drinker_name drink nolink %} | {{ block.super }}{% endblock %}
+{% block title %}Drink {{ drink.id }} by {% drinker_name drink %}| {{ block.super }}{% endblock %}
 {% block pagetitle %}Drink {{ drink.id }} by {% drinker_name drink %}{% endblock %}
 
 {% block content %}
@@ -127,7 +127,9 @@
   <img src="{{pictures.0.picture.resized.url}}">
   {% endif %}
   {% if drink.shout %}
-    {% include 'kegweb/includes/drink_shout.html' %}
+  <blockquote>
+  <p>{{ drink.shout }}</p>
+  <small>{% drinker_name drink %}, during pour</small>
   {% endif %}
 </div>
 {% endwith %}

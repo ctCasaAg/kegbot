@@ -1,0 +1,35 @@
+{% extends "kegadmin/base.html" %}
+{% load kegweblib %}
+{% load crispy_forms_tags %}
+
+{% block title %}Kegbot Admin: Drinks | {{ block.super }}{% endblock %}
+{% block pagetitle %}Kegbot Admin: Drinks{% endblock %}
+
+{% block kegadmin-main %}
+
+<table class="table table-hover table-bordered">
+<thead>
+	<tr>
+		<th>Tap</th>
+		<th>Meter</th>
+		<th>Status</th>
+	</tr>
+</thead>
+<tbody>
+{% for biding in bidings %}
+<tr>
+	<td>{{biding.user}}</td>
+	<td>{{biding.currency}}</td>
+	<td>{{biding.payment_method}}</td>
+	<td>{{biding.value}}</td>
+</tr>
+{% endfor %}
+<tr class="info">
+    <td colspan="4" style="text-align:right;">
+        <a class="btn btn-small btn-success" href="{% url 'kegadmin-add-biding' %}"><i class="icon-plus icon-white"></i> Add Biding</a>
+    </td>
+</tr>
+</tbody>
+</table>
+
+{% endblock %}

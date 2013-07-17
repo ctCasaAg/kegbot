@@ -22,6 +22,8 @@ INSTALLED_APPS = (
     'bootstrap-pagination',
     'imagekit',
     'pykeg.connections',
+    'pykeg.connections.foursquare',
+    'pykeg.connections.twitter',
     'pykeg.connections.untappd',
     'pykeg.contrib.soundserver',
     'pykeg.core',
@@ -31,12 +33,13 @@ INSTALLED_APPS = (
     'pykeg.web.kegadmin',
     'pykeg.web.kegweb',
     'pykeg.web.setup_wizard',
-    'pykeg.plugin',
     'gunicorn',
     'icanhaz',
     'registration',
     'socialregistration',
+    'socialregistration.contrib.twitter',
     'socialregistration.contrib.facebook',
+    'socialregistration.contrib.foursquare',
     'south',
     'django_nose', # must be after south
 )
@@ -65,6 +68,10 @@ SITE_ID = 1
 # http://www.w3.org/TR/REC-html40/struct/dirlang.html#langcodes
 # http://blogs.law.harvard.edu/tech/stories/storyReader$15
 LANGUAGE_CODE = 'en-us'
+
+# Local time zone for this installation. All choices can be found here:
+# http://www.postgresql.org/docs/8.1/static/datetime-keywords.html#DATETIME-TIMEZONE-SET-TABLE
+TIME_ZONE = 'America/Los_Angeles'
 
 # Enable Django 1.4+ timezone support.  Do not disable this.
 USE_TZ = True
@@ -138,8 +145,7 @@ MIDDLEWARE_CLASSES = (
     # which needs to be after it (in request order) so that it can
     # update the Cache-Control header before it (in reponse order).
     'django.middleware.cache.FetchFromCacheMiddleware',
-
-    # ApiResponseMiddleware added last.
+    'pykeg.web.api.middleware.ApiResponseMiddleware',
 )
 
 AUTHENTICATION_BACKENDS = (
@@ -158,10 +164,7 @@ CACHE_MIDDLEWARE_ANONYMOUS_ONLY = True
 INTERNAL_IPS = ('127.0.0.1',)
 
 # Set to true if the database admin module should be enabled.
-KEGBOT_ENABLE_ADMIN = True
-
-# Add plugins in local_settings.py
-KEGBOT_PLUGINS = []
+KEGBOT_ENABLE_ADMIN = False
 
 ### Celery
 import djcelery
@@ -177,19 +180,40 @@ CELERY_QUEUES = {
 CELERY_DEFAULT_QUEUE = "default"
 CELERYD_CONCURRENCY = 3
 
+### debug_toolbar
+
+if HAVE_DEBUG_TOOLBAR:
+  INSTALLED_APPS += (
+    'debug_toolbar',
+  )
+  MIDDLEWARE_CLASSES += (
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
+  )
+  DEBUG_TOOLBAR_PANELS = (
+      'debug_toolbar.panels.version.VersionDebugPanel',
+      'debug_toolbar.panels.timer.TimerDebugPanel',
+      'debug_toolbar.panels.settings_vars.SettingsVarsDebugPanel',
+      'debug_toolbar.panels.headers.HeaderDebugPanel',
+      'debug_toolbar.panels.request_vars.RequestVarsDebugPanel',
+      'debug_toolbar.panels.template.TemplateDebugPanel',
+      'debug_toolbar.panels.sql.SQLDebugPanel',
+      'debug_toolbar.panels.signals.SignalDebugPanel',
+      'debug_toolbar.panels.logger.LoggingPanel',
+      #'debug_toolbar.panels.profiling.ProfilingDebugPanel',
+  )
+
 ### logging
 
 LOGGING = {
   'version': 1,
   'disable_existing_loggers': True,
   'root': {
-    'level': 'INFO',
+    'level': 'WARNING',
     'handlers': ['console'],  # replaced with sentry later, if available.
-    'formatter': 'verbose',
   },
   'filters': {
     'require_debug_true': {
-      '()': 'django.utils.log.RequireDebugTrue',
+      '()': 'pykeg.core.logger.RequireDebugTrue',
     },
   },
   'handlers': {
@@ -197,7 +221,6 @@ LOGGING = {
       'level': 'DEBUG',
       'filters': ['require_debug_true'],
       'class': 'logging.StreamHandler',
-      'formatter': 'verbose',
     },
     'null': {
       'class': 'django.utils.log.NullHandler',
@@ -207,15 +230,7 @@ LOGGING = {
       'class': 'pykeg.core.logger.CacheHandler',
     },
   },
-  'formatters': {
-     'verbose': {
-        'format': '%(asctime)s %(levelname)-8s (%(name)s) %(message)s'
-     },
-     'simple': {
-        'format': '%(levelname)s %(message)s'
-     },
-  },
- 'loggers': {
+  'loggers': {
     'django': {
       'handlers': ['console', 'cache'],
     },
@@ -243,13 +258,6 @@ if HAVE_RAVEN:
     'class': 'raven.contrib.django.raven_compat.handlers.SentryHandler',
   }
 
-### Johnny Cache
-if HAVE_JOHNNY_CACHE:
-  MIDDLEWARE_CLASSES = (
-    'johnny.middleware.LocalStoreClearMiddleware',
-    'johnny.middleware.QueryCacheMiddleware',
-  ) + MIDDLEWARE_CLASSES
-
 ### django-storages
 if HAVE_STORAGES:
   INSTALLED_APPS += ('storages',)
@@ -259,12 +267,6 @@ MESSAGE_STORAGE = 'django.contrib.messages.storage.fallback.FallbackStorage'
 
 ### django-registration
 ACCOUNT_ACTIVATION_DAYS = 3
-
-### Statsd
-STATSD_CLIENT = 'django_statsd.clients.normal'
-
-# Set to true to route statsd pings to the debug toolbar.
-KEGBOT_STATSD_TO_TOOLBAR = False
 
 ### E-mail
 EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
@@ -314,10 +316,6 @@ except ImportError:
   print>>sys.stderr, msg
   sys.exit(1)
 
-# Override any user-specified timezone: As of Kegbot 0.9.12, this is
-# specified in site settings.
-TIME_ZONE = 'UTC'
-
 ### socialregistration (after importing common settings)
 
 if FACEBOOK_API_KEY and FACEBOOK_SECRET_KEY:
@@ -335,72 +333,4 @@ if TWITTER_CONSUMER_KEY and TWITTER_CONSUMER_SECRET_KEY:
 
 if KEGBOT_ENABLE_ADMIN:
   INSTALLED_APPS += ('django.contrib.admin',)
-
-### debug_toolbar
-
-if DEBUG:
-  if HAVE_DEBUG_TOOLBAR:
-    INSTALLED_APPS += (
-      'debug_toolbar',
-    )
-    MIDDLEWARE_CLASSES += (
-      'debug_toolbar.middleware.DebugToolbarMiddleware',
-    )
-    DEBUG_TOOLBAR_PANELS = (
-        'debug_toolbar.panels.version.VersionDebugPanel',
-        'debug_toolbar.panels.timer.TimerDebugPanel',
-        'debug_toolbar.panels.settings_vars.SettingsVarsDebugPanel',
-        'debug_toolbar.panels.headers.HeaderDebugPanel',
-        'debug_toolbar.panels.request_vars.RequestVarsDebugPanel',
-        'debug_toolbar.panels.template.TemplateDebugPanel',
-        'debug_toolbar.panels.sql.SQLDebugPanel',
-        'debug_toolbar.panels.signals.SignalDebugPanel',
-        'debug_toolbar.panels.logger.LoggingPanel',
-        #'debug_toolbar.panels.profiling.ProfilingDebugPanel',
-    )
-    if HAVE_MEMCACHE_TOOLBAR:
-      INSTALLED_APPS += ('debug_toolbar_memcache',)
-      if HAVE_MEMCACHE:
-        DEBUG_TOOLBAR_PANELS += ('debug_toolbar_memcache.panels.memcache.MemcachePanel',)
-      elif HAVE_PYLIBMC:
-        DEBUG_TOOLBAR_PANELS += ('debug_toolbar_memcache.panels.pylibmc.PylibmcPanel',)
-
-# Add all plugins to INSTALLED_APPS in order to pick up their
-# templates.  TODO(mikey): Move into template loader.
-for plugin in KEGBOT_PLUGINS:
-  module = plugin[:plugin.rindex('.')]
-  INSTALLED_APPS += (module,)
-
-### Statsd
-
-# Needs SECRET_KEY so must be imported after local settings.
-
-STATSD_PATCHES = [
-    'django_statsd.patches.db',
-    'django_statsd.patches.cache',
-]
-
-if HAVE_STATSD:
-  MIDDLEWARE_CLASSES = (
-    'django_statsd.middleware.GraphiteRequestTimingMiddleware',
-    'django_statsd.middleware.GraphiteMiddleware',
-  ) + MIDDLEWARE_CLASSES
-
-  INSTALLED_APPS += ('django_statsd',)
-
-if DEBUG and HAVE_DEBUG_TOOLBAR and KEGBOT_STATSD_TO_TOOLBAR:
-  MIDDLEWARE_CLASSES = (
-    'debug_toolbar.middleware.DebugToolbarMiddleware',
-  ) + MIDDLEWARE_CLASSES
-  DEBUG_TOOLBAR_PANELS = (
-    'django_statsd.panel.StatsdPanel',
-  ) + DEBUG_TOOLBAR_PANELS
-  STATSD_CLIENT = 'django_statsd.clients.toolbar'
-
-MIDDLEWARE_CLASSES += ('pykeg.web.api.middleware.ApiResponseMiddleware',)
-
-if HAVE_JOHNNY_CACHE:
-  if CACHES.get('default', {}).get('BACKEND', '') == 'django.core.cache.backends.memcached.MemcachedCache':
-    CACHES['default']['BACKEND'] = 'johnny.backends.memcached.MemcachedCache'
-    CACHES['default']['JOHNNY_CACHE'] = True
 
