@@ -341,7 +341,7 @@ def token_detail(request, token_id):
 		delete_form = forms.DeleteTokenForm(request.POST)
 		if delete_form.is_valid():
 			token.delete()
-			messages.success(request, 'Tap deleted.')
+			messages.success(request, 'Token deleted.')
 			return redirect('kegadmin-tokens')
 
 	form = forms.TokenForm(instance=token, initial={'username': username})
@@ -443,6 +443,18 @@ def beer_type_list(request):
 	context['beers'] = beers
 	return render_to_response('kegadmin/beer_type_list.html', context_instance=context)
 
+@staff_member_required
+def beer_type_add(request):
+	context = RequestContext(request)
+	form = forms.BeerTypeForm()
+	if request.method == 'POST':
+		form = forms.BeerTypeForm(request.POST)
+		if form.is_valid():
+			form.save()
+			messages.success(request, 'BeerType added.')
+			return redirect('kegadmin-beer-types')
+	context['form'] = form
+	return render_to_response('kegadmin/add_beer_type.html', context_instance=context)
 
 @staff_member_required
 def beer_type_detail(request, beer_id):
@@ -451,13 +463,21 @@ def beer_type_detail(request, beer_id):
 	form = forms.BeerTypeForm(instance=btype)
 	if request.method == 'POST':
 		form = forms.BeerTypeForm(request.POST, instance=btype)
-		if form.is_valid():
-			form.save()
-			messages.success(request, 'Beer type updated.')
+		if 'submit_delete_beer_type_form' in request.POST:
+			delete_form = forms.DeleteBeerTypeForm(request.POST)
+			if delete_form.is_valid():
+				btype.delete()
+				messages.success(request, 'Beer Brand deleted.')
+		elif 'submit_beer_type' in request.POST:
+			if form.is_valid():
+				form.save()
+				messages.success(request, 'Beer Brand updated.')
+		return redirect('kegadmin-beer-types')
 
 	context = RequestContext(request)
 	context['beer_type'] = btype
 	context['form'] = form
+	context['delete_form'] = forms.DeleteBeerTypeForm()
 	return render_to_response('kegadmin/beer_type_detail.html', context_instance=context)
 
 
@@ -479,19 +499,42 @@ def brewer_list(request):
 	return render_to_response('kegadmin/brewer_list.html', context_instance=context)
 
 @staff_member_required
+def brewer_add(request):
+	form = forms.BrewerForm()
+	if request.method == 'POST':
+		form = forms.BrewerForm(request.POST)
+		if form.is_valid():
+			form.save()
+			messages.success(request, 'Brewer Added.')
+			return redirect('kegadmin-brewers')
+
+	context = RequestContext(request)
+	context['form'] = form
+	return render_to_response('kegadmin/add_brewer.html', context_instance=context)
+
+
+@staff_member_required
 def brewer_detail(request, brewer_id):
 	brewer = get_object_or_404(models.Brewer, id=brewer_id)
 
 	form = forms.BrewerForm(instance=brewer)
 	if request.method == 'POST':
-		form = forms.BrewerForm(request.POST, instance=brewer)
-		if form.is_valid():
-			form.save()
-			messages.success(request, 'Brewer updated.')
+		if 'submit_delete_brewer_form' in request.POST:
+			delete_form = forms.DeleteBrewerForm(request.POST)
+			if delete_form.is_valid():
+				brewer.delete()
+				messages.success(request, 'Brewer deleted.')
+				return redirect('kegadmin-brewers')
+		elif 'submit_brewer_form' in request.POST:
+			form = forms.BrewerForm(request.POST, instance=brewer)
+			if form.is_valid():
+				form.save()
+				messages.success(request, 'Brewer updated.')
 
 	context = RequestContext(request)
 	context['brewer'] = brewer
 	context['form'] = form
+	context['delete_form'] = forms.DeleteBrewerForm();
 	return render_to_response('kegadmin/brewer_detail.html', context_instance=context)
 
 
@@ -512,6 +555,19 @@ def beer_style_list(request):
 	context['styles'] = styles
 	return render_to_response('kegadmin/beer_style_list.html', context_instance=context)
 
+def beer_style_add(request):
+	context = RequestContext(request)
+	form = forms.BeerStyleForm()
+	if request.method == 'POST':
+		form = forms.BeerStyleForm(request.POST)
+		if form.is_valid():
+			form.save()
+			messages.success(request, 'Beer style added.')
+			return redirect('kegadmin-beer-styles')
+
+	context['form'] = form
+	return render_to_response('kegadmin/add_beer_style.html', context_instance=context)
+
 @staff_member_required
 def beer_style_detail(request, style_id):
 	style = get_object_or_404(models.BeerStyle, id=style_id)
@@ -519,13 +575,32 @@ def beer_style_detail(request, style_id):
 	form = forms.BeerStyleForm(instance=style)
 	if request.method == 'POST':
 		form = forms.BeerStyleForm(request.POST, instance=style)
-		if form.is_valid():
-			form.save()
-			messages.success(request, 'Beer style updated.')
+		if 'submit_delete_beer_style_form' in request.POST:
+			delete_form = forms.DeleteBeerStyleForm(request.POST)
+			if delete_form.is_valid():
+				try:
+					style.delete()
+					messages.success(request, 'Beer Style deleted.')
+				except Exception, err:
+					message = """Beer Style can't be deleted, has been associated with a Beer Brand?"""
+					if (err[1][0]):
+						message = message + """ Maybe """ + err[1][0].type.name
+					messages.success(request, message)
+					print 
+				
+				return redirect('kegadmin-beer-styles')
+
+		elif 'submit_beer_style' in request.POST:
+			if form.is_valid():
+				form.save()
+				messages.success(request, 'Beer style updated.')
+				return redirect('kegadmin-beer-styles')
+
 
 	context = RequestContext(request)
 	context['style'] = style
 	context['form'] = form
+	context['delete_form'] = forms.DeleteBeerStyleForm()
 	return render_to_response('kegadmin/beer_style_detail.html', context_instance=context)
 
 @staff_member_required

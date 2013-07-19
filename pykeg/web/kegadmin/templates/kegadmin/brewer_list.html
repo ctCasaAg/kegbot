@@ -30,12 +30,11 @@
     <td>{{ beer.origin_city }}</td>
 </tr>
 {% endfor %}
-<!-- <tr class="info">
+<tr class="info">
     <td colspan="4" style="text-align:right;">
-        <a class="btn btn-success"
-            href=""><i class="icon-plus-sign icon-white"></i> Add New Brewer</a>
+        <a class="btn btn-success" href="{% url 'kegadmin-add-brewer' %}"><i class="icon-plus-sign icon-white"></i> Add New Brewer</a>
     </td>
-</tr> -->
+</tr>
 </tbody>
 </table>
 

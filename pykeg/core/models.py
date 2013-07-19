@@ -341,13 +341,14 @@ class BeerType(BeerDBModel):
 
 class KegSize(models.Model):
   """ A convenient table of common Keg sizes """
-  name = models.CharField(max_length=128,
-      help_text='Name of the size, for example "Half Barrel".')
+  name = models.CharField(max_length=128, help_text='Name of the size, for example "Half Barrel".')
   volume_ml = models.FloatField(help_text='Volume per instance.')
 
   def __str__(self):
     gallons = units.Quantity(self.volume_ml).InUSGallons()
-    return "%s [%.2f gal]" % (self.name, gallons)
+    liter = self.volume_ml / 1000
+    # return "%s [%.2f gal]" % (self.name, gallons)
+    return "%s [%.2f liters]" % (self.name, liter)
 
 class KegCost(models.Model):
   CURRENCY_DISPLAY_UNITS_CHOICES = (
